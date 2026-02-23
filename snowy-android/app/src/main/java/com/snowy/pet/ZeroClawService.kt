@@ -146,7 +146,8 @@ class ZeroClawService : Service() {
 
     /**
      * Send transcribed speech to ZeroClaw's webhook as a chat message.
-     * Speaks the response back via TTS.
+     * Parses the response for emotional cues to update the face,
+     * then speaks the response back via TTS.
      */
     private fun sendToChat(message: String) {
         val token = appToken
@@ -177,12 +178,20 @@ class ZeroClawService : Service() {
                     Log.i(TAG, "Speech sent to chat: \"$message\" → \"$reply\"")
 
                     if (reply.isNotEmpty()) {
+                        // Infer emotion from response and update face
+                        val emotion = inferEmotion(reply)
+                        Log.i(TAG, "Inferred emotion: $emotion")
+                        MainActivity.currentEmotion.value = emotion
+
                         // Strip markdown/emoji for cleaner TTS output
                         val cleanReply = reply
-                            .replace(Regex("\\*+"), "")
-                            .replace(Regex("[🐾✨🎉💕🐶🦴❤️]"), "")
+                            .replace(Regex("\\*[^*]+\\*"), "")  // remove *action text*
+                            .replace(Regex("[🐾✨🎉💕🐶🦴❤️😊🥺😴🤔😮💤🎵]"), "")
+                            .replace(Regex("\\s+"), " ")
                             .trim()
-                        ttsManager?.speak(cleanReply)
+                        if (cleanReply.isNotEmpty()) {
+                            ttsManager?.speak(cleanReply)
+                        }
                     }
                 } else {
                     Log.w(TAG, "Webhook returned $code for: \"$message\"")
@@ -191,6 +200,63 @@ class ZeroClawService : Service() {
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send speech to chat", e)
             }
+        }
+    }
+
+    /**
+     * Infer Snowy's emotion from the LLM response text.
+     * Checks for action cues (*wags tail*), emoji, and keywords.
+     */
+    private fun inferEmotion(text: String): Emotion {
+        val lower = text.lowercase()
+
+        // Check action descriptions first (highest signal)
+        return when {
+            // Ecstatic signals
+            lower.contains("wags tail") && (lower.contains("excit") || lower.contains("fast")) -> Emotion.ECSTATIC
+            lower.contains("jumping") || lower.contains("bouncing") -> Emotion.ECSTATIC
+            lower.contains("so happy") || lower.contains("so excited") -> Emotion.ECSTATIC
+            lower.contains("spins") || lower.contains("zoomies") -> Emotion.ECSTATIC
+
+            // Playful signals
+            lower.contains("play bow") || lower.contains("let's play") -> Emotion.PLAYFUL
+            lower.contains("playful") || lower.contains("fetch") -> Emotion.PLAYFUL
+            lower.contains("tongue out") || lower.contains("panting") -> Emotion.PLAYFUL
+
+            // Curious signals
+            lower.contains("tilts head") || lower.contains("head tilt") -> Emotion.CURIOUS
+            lower.contains("perks up ear") || lower.contains("sniffs") -> Emotion.CURIOUS
+            lower.contains("curious") || lower.contains("what's that") -> Emotion.CURIOUS
+            lower.contains("hmm") || lower.contains("interesting") -> Emotion.CURIOUS
+
+            // Happy signals
+            lower.contains("wags tail") -> Emotion.HAPPY
+            lower.contains("happy") || lower.contains("glad") -> Emotion.HAPPY
+            lower.contains("smile") || lower.contains("woof") -> Emotion.HAPPY
+            lower.contains("hi hi") || lower.contains("hello") -> Emotion.HAPPY
+
+            // Alert signals
+            lower.contains("ears perk") || lower.contains("alert") -> Emotion.ALERT
+            lower.contains("hears something") || lower.contains("what was that") -> Emotion.ALERT
+
+            // Sleepy signals
+            lower.contains("yawn") || lower.contains("sleepy") -> Emotion.SLEEPY
+            lower.contains("tired") || lower.contains("nap") -> Emotion.SLEEPY
+            lower.contains("curls up") || lower.contains("rests") -> Emotion.SLEEPY
+
+            // Lonely signals
+            lower.contains("miss") || lower.contains("lonely") -> Emotion.LONELY
+            lower.contains("whimper") || lower.contains("sad") -> Emotion.LONELY
+
+            // Confused signals
+            lower.contains("confused") || lower.contains("don't understand") -> Emotion.CONFUSED
+            lower.contains("puzzled") || lower.contains("huh") -> Emotion.CONFUSED
+
+            // Default to happy for positive responses
+            lower.contains("!") || lower.contains("love") -> Emotion.HAPPY
+
+            // Content as fallback
+            else -> Emotion.CONTENT
         }
     }
 
