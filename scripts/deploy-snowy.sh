@@ -84,15 +84,13 @@ if [[ "${1:-}" == "--apk" ]]; then
         skill_name="$(basename "$skill_dir")"
         echo "    skills/$skill_name/"
         adb shell "run-as com.snowy.pet mkdir -p files/.zeroclaw/workspace/skills/$skill_name" 2>/dev/null || true
-        for file in "$skill_dir"*; do
+        for file in "$skill_dir"*.md; do
             [ -f "$file" ] || continue
             fname="$(basename "$file")"
             adb push "$file" "/data/local/tmp/_snowy_skill_$fname"
             adb shell "run-as com.snowy.pet cp /data/local/tmp/_snowy_skill_$fname files/.zeroclaw/workspace/skills/$skill_name/$fname"
             adb shell rm "/data/local/tmp/_snowy_skill_$fname"
         done
-        # Make .sh files executable
-        adb shell "run-as com.snowy.pet sh -c 'chmod +x files/.zeroclaw/workspace/skills/$skill_name/*.sh'" 2>/dev/null || true
     done
 
     echo "==> Whitelisting from battery optimization..."
@@ -131,16 +129,17 @@ for md in "$ANDROID_DIR"/*.md; do
     adb push "$md" "$DEVICE_WORKSPACE/$(basename "$md")"
 done
 
-# Deploy skill scripts from agent/skills/
+# Deploy skills from agent/skills/ (only .md files — no scripts)
 echo "==> Deploying skills..."
 for skill_dir in "$SKILLS_DIR"/*/; do
     [ -d "$skill_dir" ] || continue
     skill_name="$(basename "$skill_dir")"
     echo "    skills/$skill_name/"
     adb shell mkdir -p "$DEVICE_WORKSPACE/skills/$skill_name"
-    adb push "$skill_dir"* "$DEVICE_WORKSPACE/skills/$skill_name/"
-    # Make .sh files executable
-    adb shell "chmod +x $DEVICE_WORKSPACE/skills/$skill_name/*.sh" 2>/dev/null || true
+    for file in "$skill_dir"*.md; do
+        [ -f "$file" ] || continue
+        adb push "$file" "$DEVICE_WORKSPACE/skills/$skill_name/$(basename "$file")"
+    done
 done
 
 echo ""

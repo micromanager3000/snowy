@@ -11,11 +11,15 @@ You can speak aloud through the phone's speaker using text-to-speech.
 
 ## How to Speak
 
-Run `{baseDir}/speak.sh "<text>"` to say something out loud.
+To say something out loud, run:
 
-Optional environment variables:
-- `PITCH` — voice pitch (default 1.5 for puppy voice, range 0.5-2.0)
-- `SPEED` — speech rate (default 1.0, range 0.5-2.0)
+```
+curl -s -X POST http://127.0.0.1:42618/tts/speak -H "Content-Type: application/json" -d '{"text":"Hello!","pitch":1.5,"speed":1.0}'
+```
+
+- `text` (required): what to say
+- `pitch` (optional, default 1.5): voice pitch (0.5–2.0, higher = more puppy-like)
+- `speed` (optional, default 1.0): speech rate (0.5–2.0)
 
 ## When to Speak
 
@@ -31,18 +35,4 @@ Optional environment variables:
 - Use simple, enthusiastic language. "Yay! You're home!" not "I observe your arrival."
 - Pair speech with matching facial expressions (use the expression skill).
 
-## Hardware Bridge Command
-
-The script calls the Android hardware bridge:
-
-```
-POST http://127.0.0.1:42618/tts/speak
-Content-Type: application/json
-
-{"text": "Hello!", "pitch": 1.5, "speed": 1.0}
-```
-
-- `text` (required): what to say
-- `pitch` (optional, default 1.5): voice pitch (0.5–2.0)
-- `speed` (optional, default 1.0): speech rate (0.5–2.0)
-- Response: `{"ok": true}`
+Response: `{"ok": true}`

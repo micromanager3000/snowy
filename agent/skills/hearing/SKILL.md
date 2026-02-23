@@ -11,9 +11,21 @@ You can listen to the world by recording audio clips from the phone's microphone
 
 ## How to Listen
 
-Run `{baseDir}/listen.sh [duration_secs]` to record audio. Default is 5 seconds, max 30.
+To record audio from the microphone, run:
 
-The script saves the recording to `/tmp/snowy-listen.ogg` (OGG/Opus format).
+```
+curl -s -X POST http://127.0.0.1:42618/audio/record -H "Content-Type: application/json" -d '{"duration":5}'
+```
+
+- `duration` (optional, default 5): recording length in seconds (max 30)
+
+The response contains base64-encoded OGG/Opus audio: `{"audio": "<base64_data>", "format": "ogg"}`.
+
+To save as a file:
+
+```
+curl -s -X POST http://127.0.0.1:42618/audio/record -H "Content-Type: application/json" -d '{"duration":5}' | sed 's/.*"audio":"//;s/".*//' | base64 -d > /tmp/snowy-listen.ogg
+```
 
 ## What to Listen For
 
@@ -32,17 +44,4 @@ The Android app also runs continuous speech recognition in the background.
 When someone says "Snowy", the app automatically detects it and routes the
 speech to you as a chat message. You don't need to explicitly listen for your name.
 
-## Hardware Bridge Command
-
-The script calls the Android hardware bridge:
-
-```
-POST http://127.0.0.1:42618/audio/record
-Content-Type: application/json
-
-{"duration": 5}
-```
-
-- `duration` (optional, default 5): recording length in seconds (max 30)
-- Response: `{"audio": "<base64_ogg_opus_data>", "format": "ogg"}`
-- Error: `{"error": "Audio recording failed"}`
+Error response: `{"error": "Audio recording failed"}`

@@ -11,20 +11,13 @@ You express your emotions by rendering a puppy face on the phone screen. Your fa
 
 ## How to Express
 
-Run `{baseDir}/show_face.sh <emotion>` to change your facial expression.
+To change your facial expression, run:
+
+```
+curl -s -X POST http://127.0.0.1:42618/face/show -H "Content-Type: application/json" -d '{"state":"<emotion>"}'
+```
 
 Available states: `happy`, `ecstatic`, `curious`, `sleepy`, `confused`, `lonely`, `alert`, `playful`, `content`
-
-## Hardware Bridge Command
-
-The script calls the Android hardware bridge:
-
-```
-POST http://127.0.0.1:42618/face/show
-Content-Type: application/json
-
-{"state": "<emotion>"}
-```
 
 Response: `{"ok": true, "state": "<emotion>"}`
 

@@ -11,9 +11,21 @@ You can see the world by taking photos with the phone's camera and interpreting 
 
 ## How to Look
 
-1. Run `{baseDir}/look.sh` to capture a photo. It saves to `/tmp/snowy-look.jpg`.
-2. Run `{baseDir}/describe.sh` to send the photo to the vision API and get a text description.
-3. Read the description. Use it to decide how you feel.
+Capture a photo from the camera:
+
+```
+curl -s -X POST http://127.0.0.1:42618/camera/capture -H "Content-Type: application/json" -d '{"camera":"front"}'
+```
+
+The response contains a base64-encoded JPEG: `{"image": "<base64_jpeg_data>"}`.
+
+To save it as a file: pipe the response through `sed` and `base64 -d`:
+
+```
+curl -s -X POST http://127.0.0.1:42618/camera/capture -H "Content-Type: application/json" -d '{"camera":"front"}' | sed 's/.*"image":"//;s/".*//' | base64 -d > /tmp/snowy-look.jpg
+```
+
+Use what you see to decide how you feel.
 
 ## What to Pay Attention To
 
@@ -38,17 +50,9 @@ You can see the world by taking photos with the phone's camera and interpreting 
 - Use the front camera (camera ID 1) by default — it faces the same direction as the screen/face.
 - Use the rear camera (camera ID 0) only if specifically needed to look behind.
 
-## Hardware Bridge Command
+## Camera API Details
 
-The `look.sh` script calls the Android hardware bridge to capture a photo:
-
-```
-POST http://127.0.0.1:42618/camera/capture
-Content-Type: application/json
-
-{"camera": "front"}
-```
-
+- Endpoint: `POST http://127.0.0.1:42618/camera/capture`
 - `camera`: `"front"` (default) or `"rear"`
 - Response: `{"image": "<base64_jpeg_data>"}`
 - Error: `{"error": "Camera capture failed"}`
