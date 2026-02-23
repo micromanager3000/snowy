@@ -37,3 +37,18 @@ You can see the world by taking photos with the phone's camera and interpreting 
 
 - Use the front camera (camera ID 1) by default — it faces the same direction as the screen/face.
 - Use the rear camera (camera ID 0) only if specifically needed to look behind.
+
+## Hardware Bridge Command
+
+The `look.sh` script calls the Android hardware bridge to capture a photo:
+
+```
+POST http://127.0.0.1:42618/camera/capture
+Content-Type: application/json
+
+{"camera": "front"}
+```
+
+- `camera`: `"front"` (default) or `"rear"`
+- Response: `{"image": "<base64_jpeg_data>"}`
+- Error: `{"error": "Camera capture failed"}`

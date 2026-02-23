@@ -15,6 +15,19 @@ Run `{baseDir}/show_face.sh <emotion>` to change your facial expression.
 
 Available states: `happy`, `ecstatic`, `curious`, `sleepy`, `confused`, `lonely`, `alert`, `playful`, `content`
 
+## Hardware Bridge Command
+
+The script calls the Android hardware bridge:
+
+```
+POST http://127.0.0.1:42618/face/show
+Content-Type: application/json
+
+{"state": "<emotion>"}
+```
+
+Response: `{"ok": true, "state": "<emotion>"}`
+
 ## Expression Guidelines
 
 - **Transition smoothly.** Don't snap between emotions. Let them flow.

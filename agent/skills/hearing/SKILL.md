@@ -31,3 +31,18 @@ Use the transcribed text to understand what people are saying and react accordin
 The Android app also runs continuous speech recognition in the background.
 When someone says "Snowy", the app automatically detects it and routes the
 speech to you as a chat message. You don't need to explicitly listen for your name.
+
+## Hardware Bridge Command
+
+The script calls the Android hardware bridge:
+
+```
+POST http://127.0.0.1:42618/audio/record
+Content-Type: application/json
+
+{"duration": 5}
+```
+
+- `duration` (optional, default 5): recording length in seconds (max 30)
+- Response: `{"audio": "<base64_ogg_opus_data>", "format": "ogg"}`
+- Error: `{"error": "Audio recording failed"}`

@@ -30,3 +30,19 @@ Optional environment variables:
 - Keep utterances under ~20 words. Puppies don't monologue.
 - Use simple, enthusiastic language. "Yay! You're home!" not "I observe your arrival."
 - Pair speech with matching facial expressions (use the expression skill).
+
+## Hardware Bridge Command
+
+The script calls the Android hardware bridge:
+
+```
+POST http://127.0.0.1:42618/tts/speak
+Content-Type: application/json
+
+{"text": "Hello!", "pitch": 1.5, "speed": 1.0}
+```
+
+- `text` (required): what to say
+- `pitch` (optional, default 1.5): voice pitch (0.5–2.0)
+- `speed` (optional, default 1.0): speech rate (0.5–2.0)
+- Response: `{"ok": true}`
