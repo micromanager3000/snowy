@@ -4,11 +4,13 @@
 # Usage:
 #   ./scripts/deploy-snowy.sh          # deploy config + SOUL only
 #   ./scripts/deploy-snowy.sh --build  # cross-compile and deploy binary too
+#   ./scripts/deploy-snowy.sh --apk    # build APK (includes binary) and install
 #
 # Prerequisites:
 #   - adb connected to device
 #   - android/config.toml exists (copy from config.toml.example, add API key)
 #   - For --build: cargo-ndk installed, Android NDK available
+#   - For --apk: JDK 17 (brew install openjdk@17), Android SDK
 
 set -euo pipefail
 
@@ -16,9 +18,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 ANDROID_DIR="$REPO_DIR/android"
 ZEROCLAW_DIR="$REPO_DIR/zeroclaw"
+APK_DIR="$REPO_DIR/snowy-android"
 DEVICE_HOME="/data/local/tmp"
 DEVICE_CONFIG="$DEVICE_HOME/.zeroclaw"
 DEVICE_WORKSPACE="$DEVICE_CONFIG/workspace"
+# APK uses app-private storage for config
+APK_DEVICE_CONFIG="/data/data/com.snowy.pet/files/.zeroclaw"
+APK_DEVICE_WORKSPACE="/data/data/com.snowy.pet/files/.zeroclaw/workspace"
 
 # Verify ADB connection
 if ! adb get-state >/dev/null 2>&1; then
@@ -34,7 +40,52 @@ if [ ! -f "$ANDROID_DIR/config.toml" ]; then
     exit 1
 fi
 
-# Build if requested
+# APK mode: build binary, package APK, install, deploy config to app-private storage
+if [[ "${1:-}" == "--apk" ]]; then
+    echo "==> Building ZeroClaw for Android ARM64..."
+    export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$HOME/Library/Android/sdk/ndk/27.2.12479018}"
+    (cd "$ZEROCLAW_DIR" && cargo ndk --platform 30 -t arm64-v8a build --bin zeroclaw --release)
+
+    echo "==> Copying binary into APK jniLibs..."
+    mkdir -p "$APK_DIR/app/src/main/jniLibs/arm64-v8a"
+    cp "$ZEROCLAW_DIR/target/aarch64-linux-android/release/zeroclaw" \
+       "$APK_DIR/app/src/main/jniLibs/arm64-v8a/libzeroclaw.so"
+
+    echo "==> Building APK..."
+    export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
+    export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+    (cd "$APK_DIR" && ./gradlew assembleDebug)
+
+    echo "==> Installing APK..."
+    adb install -r "$APK_DIR/app/build/outputs/apk/debug/app-debug.apk"
+
+    echo "==> Deploying config to app-private storage..."
+    adb shell run-as com.snowy.pet mkdir -p files/.zeroclaw/workspace 2>/dev/null || true
+    # Use push + cp since run-as can't receive push directly
+    adb push "$ANDROID_DIR/config.toml" "/data/local/tmp/_snowy_config.toml"
+    adb shell "run-as com.snowy.pet cp /data/local/tmp/_snowy_config.toml files/.zeroclaw/config.toml"
+    adb shell "run-as com.snowy.pet chmod 600 files/.zeroclaw/config.toml"
+    adb shell rm /data/local/tmp/_snowy_config.toml
+
+    for md in "$ANDROID_DIR"/*.md; do
+        [ -f "$md" ] || continue
+        local_name="$(basename "$md")"
+        echo "    $local_name"
+        adb push "$md" "/data/local/tmp/_snowy_$local_name"
+        adb shell "run-as com.snowy.pet cp /data/local/tmp/_snowy_$local_name files/.zeroclaw/workspace/$local_name"
+        adb shell rm "/data/local/tmp/_snowy_$local_name"
+    done
+
+    echo "==> Whitelisting from battery optimization..."
+    adb shell dumpsys deviceidle whitelist +com.snowy.pet 2>/dev/null || true
+
+    echo ""
+    echo "Done! Open the Snowy app on the device to start the service."
+    echo "Snowy will auto-start on boot after first launch."
+    exit 0
+fi
+
+# Build if requested (legacy ADB binary mode)
 if [[ "${1:-}" == "--build" ]]; then
     echo "==> Building ZeroClaw for Android ARM64..."
     export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$HOME/Library/Android/sdk/ndk/27.2.12479018}"

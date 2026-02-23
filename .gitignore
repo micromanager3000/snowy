@@ -3,3 +3,10 @@ android/config.toml
 
 # Cloned ZeroClaw repo (upstream, not our code)
 zeroclaw/
+
+# Android build artifacts
+snowy-android/.gradle/
+snowy-android/app/build/
+snowy-android/build/
+snowy-android/app/src/main/jniLibs/
+snowy-android/local.properties
