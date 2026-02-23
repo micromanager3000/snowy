@@ -13,6 +13,7 @@ class HardwareBridge(
     private val onFaceChange: (String) -> Unit,
     private val onCameraCapture: (String) -> String?,  // camera id -> base64 jpeg or null
     private val onTtsSpeak: (String, Float, Float) -> Unit,  // text, pitch, speed
+    private val onAudioRecord: (Int) -> Pair<String, String>?,  // durationSecs -> (base64, format) or null
 ) : NanoHTTPD("127.0.0.1", PORT) {
 
     companion object {
@@ -30,6 +31,7 @@ class HardwareBridge(
                 method == Method.POST && uri == "/face/show" -> handleFaceShow(session)
                 method == Method.POST && uri == "/camera/capture" -> handleCameraCapture(session)
                 method == Method.POST && uri == "/tts/speak" -> handleTtsSpeak(session)
+                method == Method.POST && uri == "/audio/record" -> handleAudioRecord(session)
                 method == Method.GET && uri == "/status" -> handleStatus()
                 else -> newFixedLengthResponse(
                     Response.Status.NOT_FOUND, MIME_JSON,
@@ -79,6 +81,22 @@ class HardwareBridge(
         Log.i(TAG, "TTS: $text")
         onTtsSpeak(text, pitch, speed)
         return jsonResponse("""{"ok":true}""")
+    }
+
+    private fun handleAudioRecord(session: IHTTPSession): Response {
+        val body = readBody(session)
+        val json = JSONObject(body)
+        val duration = json.optInt("duration", 5)
+        Log.i(TAG, "Audio record: ${duration}s")
+        val result = onAudioRecord(duration)
+        return if (result != null) {
+            jsonResponse("""{"audio":"${result.first}","format":"${result.second}"}""")
+        } else {
+            newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR, MIME_JSON,
+                """{"error":"Audio recording failed"}"""
+            )
+        }
     }
 
     private fun handleStatus(): Response {

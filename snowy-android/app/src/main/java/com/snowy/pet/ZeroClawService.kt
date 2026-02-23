@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
+import com.snowy.pet.bridge.AudioManager
 import com.snowy.pet.bridge.CameraManager
 import com.snowy.pet.bridge.HardwareBridge
 import com.snowy.pet.bridge.TtsManager
@@ -31,6 +32,7 @@ class ZeroClawService : Service() {
     private var bridge: HardwareBridge? = null
     private var cameraManager: CameraManager? = null
     private var ttsManager: TtsManager? = null
+    private var audioManager: AudioManager? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -65,6 +67,7 @@ class ZeroClawService : Service() {
     private fun startHardwareBridge() {
         cameraManager = CameraManager(this).also { it.start() }
         ttsManager = TtsManager(this)
+        audioManager = AudioManager(this)
 
         bridge = HardwareBridge(
             onFaceChange = { state ->
@@ -76,6 +79,9 @@ class ZeroClawService : Service() {
             },
             onTtsSpeak = { text, pitch, speed ->
                 ttsManager?.speak(text, pitch, speed)
+            },
+            onAudioRecord = { durationSecs ->
+                audioManager?.recordBase64(durationSecs)
             }
         )
 
@@ -94,6 +100,7 @@ class ZeroClawService : Service() {
         cameraManager = null
         ttsManager?.shutdown()
         ttsManager = null
+        audioManager = null
     }
 
     private fun runWithRetries() {
