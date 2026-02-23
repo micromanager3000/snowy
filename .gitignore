@@ -1,0 +1,5 @@
+# API keys / secrets
+android/config.toml
+
+# Cloned ZeroClaw repo (upstream, not our code)
+zeroclaw/

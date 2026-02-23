@@ -1,0 +1,7 @@
+# ZeroClaw config for Snowy (robot pet on Android)
+# Copy to config.toml and fill in your API key:
+#   cp config.toml.example config.toml
+api_key = "YOUR_ANTHROPIC_API_KEY_HERE"
+default_provider = "anthropic"
+default_model = "claude-haiku-4-5-20251001"
+default_temperature = 0.8
