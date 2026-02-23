@@ -5,14 +5,21 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import com.snowy.pet.bridge.AudioManager
 import com.snowy.pet.bridge.CameraManager
 import com.snowy.pet.bridge.HardwareBridge
+import com.snowy.pet.bridge.SpeechManager
 import com.snowy.pet.bridge.TtsManager
 import com.snowy.pet.ui.Emotion
+import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.UUID
 import kotlin.concurrent.thread
 
 class ZeroClawService : Service() {
@@ -23,6 +30,8 @@ class ZeroClawService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val MAX_RETRIES = 10
         private const val INITIAL_BACKOFF_MS = 1000L
+        private const val ZEROCLAW_GATEWAY = "http://127.0.0.1:42617"
+        private const val WAKE_ECSTATIC_DURATION_MS = 3000L
     }
 
     @Volatile
@@ -33,6 +42,9 @@ class ZeroClawService : Service() {
     private var cameraManager: CameraManager? = null
     private var ttsManager: TtsManager? = null
     private var audioManager: AudioManager? = null
+    private var speechManager: SpeechManager? = null
+    private var appToken: String? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -49,6 +61,7 @@ class ZeroClawService : Service() {
         if (!running) {
             running = true
             workerThread = thread(name = "zeroclaw-runner") {
+                appToken = ensureAppToken()
                 runWithRetries()
             }
         }
@@ -91,9 +104,20 @@ class ZeroClawService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start hardware bridge", e)
         }
+
+        // Start continuous speech recognition (wake word: "Snowy")
+        speechManager = SpeechManager(
+            context = this,
+            onWakeWord = { handleWakeWord() },
+            onSpeechToChat = { message -> sendToChat(message) }
+        )
+        speechManager?.start()
+        Log.i(TAG, "Speech recognition started (wake word: Snowy)")
     }
 
     private fun stopHardwareBridge() {
+        speechManager?.stop()
+        speechManager = null
         bridge?.stop()
         bridge = null
         cameraManager?.stop()
@@ -101,6 +125,107 @@ class ZeroClawService : Service() {
         ttsManager?.shutdown()
         ttsManager = null
         audioManager = null
+    }
+
+    /**
+     * Wake word "Snowy" detected — wag tail super fast (ECSTATIC) for 3 seconds,
+     * then revert to whatever emotion was showing before.
+     */
+    private fun handleWakeWord() {
+        val previousEmotion = MainActivity.currentEmotion.value
+        MainActivity.currentEmotion.value = Emotion.ECSTATIC
+        Log.i(TAG, "Wake word! Tail wagging (ECSTATIC for ${WAKE_ECSTATIC_DURATION_MS}ms)")
+
+        mainHandler.postDelayed({
+            // Only revert if still ECSTATIC (bridge might have changed it)
+            if (MainActivity.currentEmotion.value == Emotion.ECSTATIC) {
+                MainActivity.currentEmotion.value = previousEmotion
+            }
+        }, WAKE_ECSTATIC_DURATION_MS)
+    }
+
+    /**
+     * Send transcribed speech to ZeroClaw's webhook as a chat message.
+     */
+    private fun sendToChat(message: String) {
+        val token = appToken
+        if (token == null) {
+            Log.w(TAG, "No app token, can't send to chat: $message")
+            return
+        }
+
+        thread(name = "webhook-sender") {
+            try {
+                val url = URL("$ZEROCLAW_GATEWAY/webhook")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.connectTimeout = 5000
+                conn.readTimeout = 10000
+                conn.doOutput = true
+
+                val body = JSONObject().put("message", message).toString()
+                conn.outputStream.use { it.write(body.toByteArray()) }
+
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    Log.i(TAG, "Speech sent to chat: \"$message\"")
+                } else {
+                    Log.w(TAG, "Webhook returned $code for: \"$message\"")
+                }
+                conn.disconnect()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to send speech to chat", e)
+            }
+        }
+    }
+
+    /**
+     * Ensure the Android app has a bearer token for calling ZeroClaw's webhook.
+     * Injects a persistent token into config.toml before the daemon starts.
+     */
+    private fun ensureAppToken(): String {
+        val prefs = getSharedPreferences("snowy", MODE_PRIVATE)
+        var token = prefs.getString("app_token", null)
+        if (token == null) {
+            token = UUID.randomUUID().toString()
+            prefs.edit().putString("app_token", token).apply()
+            Log.i(TAG, "Generated new app token")
+        }
+
+        val configFile = File(filesDir, ".zeroclaw/config.toml")
+        if (configFile.exists()) {
+            var content = configFile.readText()
+            if (!content.contains(token)) {
+                val regex = Regex("""(paired_tokens\s*=\s*\[)(.*?)(])""")
+                content = if (regex.containsMatchIn(content)) {
+                    regex.replace(content) { match ->
+                        val prefix = match.groupValues[1]
+                        val existing = match.groupValues[2].trim()
+                        val suffix = match.groupValues[3]
+                        if (existing.isEmpty()) {
+                            "${prefix}\"${token}\"${suffix}"
+                        } else {
+                            "${prefix}${existing}, \"${token}\"${suffix}"
+                        }
+                    }
+                } else if (content.contains("[gateway]")) {
+                    content.replace(
+                        "[gateway]",
+                        "[gateway]\npaired_tokens = [\"${token}\"]"
+                    )
+                } else {
+                    content + "\n[gateway]\npaired_tokens = [\"${token}\"]\n"
+                }
+                configFile.writeText(content)
+                Log.i(TAG, "Injected app token into config.toml")
+            }
+        } else {
+            Log.w(TAG, "config.toml not found, can't inject token")
+        }
+
+        return token
     }
 
     private fun runWithRetries() {
