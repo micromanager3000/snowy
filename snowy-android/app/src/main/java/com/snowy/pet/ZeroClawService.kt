@@ -146,6 +146,7 @@ class ZeroClawService : Service() {
 
     /**
      * Send transcribed speech to ZeroClaw's webhook as a chat message.
+     * Speaks the response back via TTS.
      */
     private fun sendToChat(message: String) {
         val token = appToken
@@ -162,7 +163,7 @@ class ZeroClawService : Service() {
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.connectTimeout = 5000
-                conn.readTimeout = 10000
+                conn.readTimeout = 30000
                 conn.doOutput = true
 
                 val body = JSONObject().put("message", message).toString()
@@ -170,7 +171,19 @@ class ZeroClawService : Service() {
 
                 val code = conn.responseCode
                 if (code in 200..299) {
-                    Log.i(TAG, "Speech sent to chat: \"$message\"")
+                    val responseBody = conn.inputStream.bufferedReader().readText()
+                    val responseJson = JSONObject(responseBody)
+                    val reply = responseJson.optString("response", "")
+                    Log.i(TAG, "Speech sent to chat: \"$message\" → \"$reply\"")
+
+                    if (reply.isNotEmpty()) {
+                        // Strip markdown/emoji for cleaner TTS output
+                        val cleanReply = reply
+                            .replace(Regex("\\*+"), "")
+                            .replace(Regex("[🐾✨🎉💕🐶🦴❤️]"), "")
+                            .trim()
+                        ttsManager?.speak(cleanReply)
+                    }
                 } else {
                     Log.w(TAG, "Webhook returned $code for: \"$message\"")
                 }
