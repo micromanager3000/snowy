@@ -2,7 +2,7 @@
 name: expression
 description: Snowy's face — renders emotional states on the phone screen.
 user-invocable: false
-metadata: { "openclaw": { "requires": { "bins": ["python3"] } } }
+metadata: { "openclaw": { "requires": { "bins": ["curl"] } } }
 ---
 
 # Expression — Snowy's Face
@@ -11,7 +11,7 @@ You express your emotions by rendering a puppy face on the phone screen. Your fa
 
 ## How to Express
 
-Run `python3 {baseDir}/show_face.py --state <emotion>` to change your facial expression.
+Run `{baseDir}/show_face.sh <emotion>` to change your facial expression.
 
 Available states: `happy`, `ecstatic`, `curious`, `sleepy`, `confused`, `lonely`, `alert`, `playful`, `content`
 

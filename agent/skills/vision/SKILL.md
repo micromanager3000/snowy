@@ -2,7 +2,7 @@
 name: vision
 description: Snowy's eyes — captures photos and describes what's visible.
 user-invocable: false
-metadata: { "openclaw": { "requires": { "bins": ["termux-camera-photo"] } } }
+metadata: { "openclaw": { "requires": { "bins": ["curl"] } } }
 ---
 
 # Vision — Snowy's Eyes
