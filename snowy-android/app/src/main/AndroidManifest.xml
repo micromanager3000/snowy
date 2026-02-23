@@ -11,6 +11,7 @@
         android:allowBackup="false"
         android:icon="@android:drawable/ic_menu_compass"
         android:label="@string/app_name"
+        android:theme="@style/Theme.Snowy"
         android:supportsRtl="true">
 
         <activity
