@@ -7,6 +7,10 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
+import com.snowy.pet.bridge.CameraManager
+import com.snowy.pet.bridge.HardwareBridge
+import com.snowy.pet.bridge.TtsManager
+import com.snowy.pet.ui.Emotion
 import java.io.File
 import kotlin.concurrent.thread
 
@@ -24,12 +28,16 @@ class ZeroClawService : Service() {
     private var running = false
     private var process: Process? = null
     private var workerThread: Thread? = null
+    private var bridge: HardwareBridge? = null
+    private var cameraManager: CameraManager? = null
+    private var ttsManager: TtsManager? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        startHardwareBridge()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -50,7 +58,42 @@ class ZeroClawService : Service() {
         running = false
         process?.destroyForcibly()
         workerThread?.interrupt()
+        stopHardwareBridge()
         super.onDestroy()
+    }
+
+    private fun startHardwareBridge() {
+        cameraManager = CameraManager(this).also { it.start() }
+        ttsManager = TtsManager(this)
+
+        bridge = HardwareBridge(
+            onFaceChange = { state ->
+                MainActivity.currentEmotion.value = Emotion.fromString(state)
+            },
+            onCameraCapture = { cameraId ->
+                val useFront = cameraId != "rear"
+                cameraManager?.captureBase64(useFront)
+            },
+            onTtsSpeak = { text, pitch, speed ->
+                ttsManager?.speak(text, pitch, speed)
+            }
+        )
+
+        try {
+            bridge?.start()
+            Log.i(TAG, "Hardware bridge started on port ${HardwareBridge.PORT}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start hardware bridge", e)
+        }
+    }
+
+    private fun stopHardwareBridge() {
+        bridge?.stop()
+        bridge = null
+        cameraManager?.stop()
+        cameraManager = null
+        ttsManager?.shutdown()
+        ttsManager = null
     }
 
     private fun runWithRetries() {
@@ -59,10 +102,10 @@ class ZeroClawService : Service() {
 
         while (running && retries < MAX_RETRIES) {
             try {
-                updateNotification("Snowy is running (attempt ${retries + 1})")
+                updateNotification("Snowy is running")
                 val exitCode = runZeroClaw()
 
-                if (!running) break // Clean shutdown
+                if (!running) break
 
                 Log.w(TAG, "ZeroClaw exited with code $exitCode")
                 retries++
@@ -99,7 +142,6 @@ class ZeroClawService : Service() {
         val binaryPath = File(applicationInfo.nativeLibraryDir, "libzeroclaw.so").absolutePath
         val homeDir = filesDir.absolutePath
 
-        // Ensure .zeroclaw directory exists (config is deployed here via ADB push)
         val configDir = File(homeDir, ".zeroclaw")
         configDir.mkdirs()
 
@@ -114,7 +156,6 @@ class ZeroClawService : Service() {
 
         process = pb.start()
 
-        // Log stdout/stderr in background
         thread(name = "zeroclaw-logger", isDaemon = true) {
             try {
                 process?.inputStream?.bufferedReader()?.forEachLine { line ->

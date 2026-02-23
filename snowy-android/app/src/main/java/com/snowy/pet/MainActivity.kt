@@ -5,59 +5,63 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
+import com.snowy.pet.ui.Emotion
+import com.snowy.pet.ui.PetFaceScreen
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : ComponentActivity() {
 
     companion object {
-        private const val NOTIFICATION_PERMISSION_REQUEST = 1001
+        /** Shared mutable state so the bridge can update the face from any thread. */
+        val currentEmotion = mutableStateOf(Emotion.HAPPY)
+    }
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        // Log but don't block — service runs regardless
+        results.forEach { (perm, granted) ->
+            android.util.Log.i("MainActivity", "$perm granted=$granted")
+        }
+        startZeroClawService()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val textView = TextView(this).apply {
-            text = "Snowy is starting..."
-            textSize = 20f
-            setPadding(48, 48, 48, 48)
+        setContent {
+            val emotion by remember { currentEmotion }
+            PetFaceScreen(emotion = emotion)
         }
-        setContentView(textView)
 
-        // Request notification permission on Android 13+
+        requestPermissionsAndStart()
+    }
+
+    private fun requestPermissionsAndStart() {
+        val needed = mutableListOf<String>()
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED
             ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    NOTIFICATION_PERMISSION_REQUEST
-                )
-                return // Wait for permission result before starting service
+                needed.add(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
-        startZeroClawService()
-        textView.text = "Snowy is running.\n\nYou can close this app — Snowy will keep running in the background."
-    }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            needed.add(Manifest.permission.CAMERA)
+        }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
-            // Start service regardless — it works without notification permission,
-            // but the notification won't show.
+        if (needed.isNotEmpty()) {
+            permissionLauncher.launch(needed.toTypedArray())
+        } else {
             startZeroClawService()
-            val textView = findViewById<TextView>(android.R.id.content)
-                ?: (window.decorView.findViewById<android.view.ViewGroup>(android.R.id.content))
-                    ?.getChildAt(0) as? TextView
-            textView?.text = "Snowy is running.\n\nYou can close this app — Snowy will keep running in the background."
         }
     }
 
