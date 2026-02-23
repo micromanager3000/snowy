@@ -19,6 +19,7 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 ANDROID_DIR="$REPO_DIR/android"
 ZEROCLAW_DIR="$REPO_DIR/zeroclaw"
 APK_DIR="$REPO_DIR/snowy-android"
+SKILLS_DIR="$REPO_DIR/agent/skills"
 DEVICE_HOME="/data/local/tmp"
 DEVICE_CONFIG="$DEVICE_HOME/.zeroclaw"
 DEVICE_WORKSPACE="$DEVICE_CONFIG/workspace"
@@ -76,6 +77,24 @@ if [[ "${1:-}" == "--apk" ]]; then
         adb shell rm "/data/local/tmp/_snowy_$local_name"
     done
 
+    echo "==> Deploying skills..."
+    adb shell "run-as com.snowy.pet mkdir -p files/.zeroclaw/workspace/skills" 2>/dev/null || true
+    for skill_dir in "$SKILLS_DIR"/*/; do
+        [ -d "$skill_dir" ] || continue
+        skill_name="$(basename "$skill_dir")"
+        echo "    skills/$skill_name/"
+        adb shell "run-as com.snowy.pet mkdir -p files/.zeroclaw/workspace/skills/$skill_name" 2>/dev/null || true
+        for file in "$skill_dir"*; do
+            [ -f "$file" ] || continue
+            fname="$(basename "$file")"
+            adb push "$file" "/data/local/tmp/_snowy_skill_$fname"
+            adb shell "run-as com.snowy.pet cp /data/local/tmp/_snowy_skill_$fname files/.zeroclaw/workspace/skills/$skill_name/$fname"
+            adb shell rm "/data/local/tmp/_snowy_skill_$fname"
+        done
+        # Make .sh files executable
+        adb shell "run-as com.snowy.pet sh -c 'chmod +x files/.zeroclaw/workspace/skills/$skill_name/*.sh'" 2>/dev/null || true
+    done
+
     echo "==> Whitelisting from battery optimization..."
     adb shell dumpsys deviceidle whitelist +com.snowy.pet 2>/dev/null || true
 
@@ -110,6 +129,18 @@ for md in "$ANDROID_DIR"/*.md; do
     [ -f "$md" ] || continue
     echo "    $(basename "$md")"
     adb push "$md" "$DEVICE_WORKSPACE/$(basename "$md")"
+done
+
+# Deploy skill scripts from agent/skills/
+echo "==> Deploying skills..."
+for skill_dir in "$SKILLS_DIR"/*/; do
+    [ -d "$skill_dir" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    echo "    skills/$skill_name/"
+    adb shell mkdir -p "$DEVICE_WORKSPACE/skills/$skill_name"
+    adb push "$skill_dir"* "$DEVICE_WORKSPACE/skills/$skill_name/"
+    # Make .sh files executable
+    adb shell "chmod +x $DEVICE_WORKSPACE/skills/$skill_name/*.sh" 2>/dev/null || true
 done
 
 echo ""
